@@ -1,0 +1,13 @@
+# Python 3.14 compatible Phase-1 dependencies.
+# Deliberately use plain uvicorn (not uvicorn[standard]) to avoid unnecessary native extras.
+fastapi==0.116.1
+uvicorn==0.35.0
+SQLAlchemy==2.0.43
+psycopg[binary]==3.3.5
+pydantic==2.13.5
+pydantic-settings==2.15.0
+python-dotenv==1.1.1
+pyserial==3.5
+requests==2.32.5
+numpy==2.5.2
+scipy==1.17.1

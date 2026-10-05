@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: driftpulse-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: driftpulse
+      POSTGRES_USER: driftpulse
+      POSTGRES_PASSWORD: driftpulse
+    ports:
+      - "5432:5432"
+    volumes:
+      - driftpulse_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U driftpulse -d driftpulse"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  driftpulse_postgres_data:
