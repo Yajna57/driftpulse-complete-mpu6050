@@ -3,15 +3,31 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import SensorReading
 from ..schemas import IngestResponse, ReadingCreate, ReadingOut
 from ..services.analysis import analyze_reading
+from ..services.live import get_live, update_live
 
 router = APIRouter(prefix="/api/v1", tags=["readings"])
+
+
+@router.get("/users")
+def users(db: Session = Depends(get_db)) -> list[dict]:
+    rows = db.execute(
+        select(SensorReading.user_id, func.max(SensorReading.captured_at).label("last_reading"))
+        .group_by(SensorReading.user_id)
+        .order_by(func.max(SensorReading.captured_at).desc())
+    ).all()
+    return [{"user_id": r.user_id, "last_reading": r.last_reading} for r in rows]
+
+
+@router.get("/users/{user_id}/live")
+def live(user_id: str) -> dict:
+    return get_live(user_id)
 
 
 @router.post("/readings", response_model=IngestResponse)
@@ -46,6 +62,15 @@ def create_reading(payload: ReadingCreate, db: Session = Depends(get_db)) -> Ing
 
     analysis = analyze_reading(db, row)
     db.commit()
+
+    update_live(
+        payload.user_id,
+        payload.device_id,
+        payload.ecg_samples,
+        payload.sample_rate_hz,
+        payload.sensor_status,
+        payload.arduino_messages,
+    )
 
     return IngestResponse(
         reading_id=row.id,
@@ -85,10 +110,11 @@ def history(
     db: Session = Depends(get_db),
 ) -> list[ReadingOut]:
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
-    rows = db.scalars(
+    rows = list(db.scalars(
         select(SensorReading)
         .where(SensorReading.user_id == user_id, SensorReading.captured_at >= cutoff)
-        .order_by(SensorReading.captured_at.asc())
+        .order_by(SensorReading.captured_at.desc())
         .limit(limit)
-    ).all()
+    ).all())
+    rows.reverse()
     return [ReadingOut.model_validate(row) for row in rows]

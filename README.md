@@ -59,8 +59,11 @@ In a second terminal, test software first:
 ```powershell
 cd python
 .\.venv\Scripts\Activate.ps1
-python -m scripts.simulate_data --user USER001 --seconds 180 --drift-after 100
+python -m scripts.simulate_data --list      # 8 cases: normal, fever, all abnormal, sensor faults,
+python -m scripts.simulate_data --case 1    # running, sleeping, heart attack, head spin
 ```
+
+Each case runs for USER001 and USER002 at the same time. See `docs/SIMULATION.md`.
 
 Frontend:
 
@@ -88,12 +91,17 @@ python -m serial.tools.list_ports
 python -m collector.serial_collector --port COM3 --user USER001
 ```
 
+Then open `http://localhost:5173` and choose the same user (e.g. `USER001`) in the **User** dropdown.
+The top panel shows whether data is arriving and the status of each sensor; below it is the live
+ECG waveform. If a sensor shows a problem, see `docs/SETUP.md` section 7c.
+
 See:
 
 - `docs/HARDWARE.md` — wiring/pins and safety
 - `docs/SETUP.md` — detailed Python 3.14/Docker/frontend setup
 - `docs/ALGORITHMS.md` — HRV, baseline, EWMA/CUSUM and motion context
 - `docs/API.md` — backend endpoints
+- `docs/SIMULATION.md` — the 8 simulated test cases
 
 ## Important
 

@@ -37,6 +37,14 @@ class ReadingCreate(BaseModel):
 
     hrv: HRVInput | None = None
 
+    # Live display data (kept in memory only, not stored in the database).
+    # ecg_samples: raw AD8232 values since the previous summary; null = leads off.
+    ecg_samples: list[int | None] | None = Field(default=None, max_length=2000)
+    sample_rate_hz: float | None = None
+    # e.g. {"MAX30102": {"state": "OK", "detail": "..."}}
+    sensor_status: dict[str, dict] | None = None
+    arduino_messages: list[str] | None = None
+
 
 class ReadingOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)

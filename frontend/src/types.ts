@@ -56,3 +56,25 @@ export interface AlertItem {
   created_at: string
   resolved: boolean
 }
+
+export interface SensorState {
+  state: string
+  detail: string
+}
+
+export interface LiveState {
+  user_id: string
+  connected: boolean
+  device_id: string | null
+  last_seen: string | null
+  seconds_since_last: number | null
+  sample_rate_hz: number
+  ecg_samples: (number | null)[]
+  sensor_status: Record<string, SensorState>
+  arduino_messages: string[]
+}
+
+export interface UserItem {
+  user_id: string
+  last_reading: string
+}

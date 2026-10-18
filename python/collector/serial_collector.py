@@ -63,11 +63,64 @@ def parse_row(row: dict[str, str]) -> dict[str, Any]:
     }
 
 
+def sensor_status(
+    latest: dict[str, Any],
+    ppg_available: bool,
+    mpu_available: bool,
+    temperature_valid: bool,
+    arduino_messages: list[str],
+) -> dict[str, dict[str, str]]:
+    """Plain-language per-sensor health for the dashboard."""
+
+    def reported_missing(name: str) -> bool:
+        return any(name in message for message in arduino_messages)
+
+    i2c_stuck = reported_missing("I2C_BUS_STUCK_LOW")
+    i2c_stuck_detail = "I2C bus stuck LOW: SDA/SCL shorted to GND or a module has no power"
+
+    if ppg_available and latest["max30102_ir"] >= 50000:
+        max_status = {"state": "OK", "detail": f"IR {latest['max30102_ir']}"}
+    elif ppg_available:
+        max_status = {"state": "NO_CONTACT", "detail": f"IR {latest['max30102_ir']} < 50000; place finger on sensor"}
+    else:
+        max_status = {
+            "state": "NOT_DETECTED",
+            "detail": i2c_stuck_detail if i2c_stuck
+            else "Arduino reported MAX30102 not found" if reported_missing("MAX30102")
+            else "IR/Red are 0; check SDA(A4)/SCL(A5)/power",
+        }
+
+    if latest["ecg_lead_off"]:
+        ecg_status = {"state": "LEADS_OFF", "detail": "LO+/LO- high; check electrodes and D8/D9 wiring"}
+    else:
+        ecg_status = {"state": "OK", "detail": f"raw {latest['ecg_raw']}"}
+
+    if temperature_valid:
+        temp_status = {"state": "OK", "detail": f"{latest['temperature_c']:.2f} C"}
+    else:
+        temp_status = {
+            "state": "OUT_OF_RANGE",
+            "detail": f"reads {latest['temperature_c']:.1f} C; check LM35 OUT->A1, VCC->5V, GND",
+        }
+
+    if mpu_available:
+        mpu_status = {"state": "OK", "detail": f"az {latest['accel_z_ms2']:.2f} m/s2"}
+    else:
+        mpu_status = {
+            "state": "NOT_DETECTED",
+            "detail": i2c_stuck_detail if i2c_stuck
+            else "Arduino reported MPU6050 not found" if reported_missing("MPU6050")
+            else "all axes 0; check SDA(A4)/SCL(A5)/power",
+        }
+
+    return {"MAX30102": max_status, "AD8232": ecg_status, "LM35": temp_status, "MPU6050": mpu_status}
+
+
 def post_summary(api_url: str, payload: dict[str, Any]) -> dict[str, Any]:
     response = requests.post(
         f"{api_url.rstrip('/')}/api/v1/readings",
         json=payload,
-        timeout=5,
+        timeout=2,
     )
     response.raise_for_status()
     return response.json()
@@ -82,12 +135,15 @@ def main() -> int:
     raw_log = log_dir / f"raw_sensor_{args.user}_{stamp}.csv"
 
     ecg_buffer: deque[float] = deque(maxlen=int(args.sample_rate * 60))
+    # Raw ECG since the last summary, sent for the live waveform (None = leads off).
+    ecg_since_send: list[int | None] = []
+    arduino_messages: list[str] = []
     activity = ActivityEstimator(sample_window=max(int(args.sample_rate * 2), 1))
 
     print(f"Connecting to {args.port} @ {args.baud} ...")
     ser = serial.Serial(args.port, args.baud, timeout=1)
-    time.sleep(2.0)
-    ser.reset_input_buffer()
+    # Opening the port resets the Arduino. Start reading immediately (no flush)
+    # so ERROR:/WARN: sensor messages and the CSV header are not discarded.
 
     print(f"Raw CSV: {raw_log}")
     print(f"API:     {args.api}")
@@ -95,23 +151,46 @@ def main() -> int:
 
     header_seen = False
     last_send = 0.0
-    rows_since_flush = 0
+    last_input_at = time.monotonic()
+    last_row_at = last_input_at
+    last_diagnostic_at = last_input_at
+    last_flush_at = last_input_at
+    last_line = "(no serial data received)"
+    invalid_lines_reported = 0
 
     with raw_log.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(["pc_timestamp", *EXPECTED_COLUMNS])
+        handle.flush()
 
         try:
             while True:
                 raw = ser.readline()
                 if not raw:
+                    now = time.monotonic()
+                    if now - last_input_at >= 5 and now - last_diagnostic_at >= 5:
+                        print(
+                            f"No serial data received from {args.port}; check the selected COM port, "
+                            "uploaded sketch, and baud rate.",
+                            file=sys.stderr,
+                        )
+                        last_diagnostic_at = now
                     continue
 
+                last_input_at = time.monotonic()
                 line = raw.decode("utf-8", errors="ignore").strip()
+                last_line = line[:160]
                 if not line:
+                    continue
+                if line.startswith("INFO:"):
+                    print(f"Arduino: {line}")
+                    if line == "INFO:DRIFTPULSE_BOOT":
+                        arduino_messages.clear()
                     continue
                 if line.startswith(("ERROR:", "WARN:")):
                     print(f"Arduino: {line}", file=sys.stderr)
+                    if line not in arduino_messages:
+                        arduino_messages.append(line)
                     continue
 
                 if line.startswith("arduino_ms,"):
@@ -129,42 +208,34 @@ def main() -> int:
 
                 values = line.split(",")
                 if len(values) != len(EXPECTED_COLUMNS):
+                    if invalid_lines_reported < 3:
+                        print(f"Skipping unexpected serial line: {last_line!r}", file=sys.stderr)
+                        invalid_lines_reported += 1
                     continue
 
                 string_row = dict(zip(EXPECTED_COLUMNS, values, strict=True))
                 try:
                     latest = parse_row(string_row)
                 except (TypeError, ValueError):
+                    if invalid_lines_reported < 3:
+                        print(f"Skipping non-numeric sensor row: {last_line!r}", file=sys.stderr)
+                        invalid_lines_reported += 1
                     continue
 
+                last_row_at = time.monotonic()
                 timestamp = datetime.now().astimezone().isoformat(timespec="milliseconds")
                 writer.writerow([timestamp, *values])
-                rows_since_flush += 1
-                if rows_since_flush >= 100:
+                if last_row_at - last_flush_at >= 1:
                     handle.flush()
-                    rows_since_flush = 0
+                    last_flush_at = last_row_at
 
-                if not latest["ecg_lead_off"]:
+                if latest["ecg_lead_off"]:
+                    ecg_buffer.clear()
+                    ecg_since_send.append(None)
+                else:
                     ecg_buffer.append(float(latest["ecg_raw"]))
+                    ecg_since_send.append(latest["ecg_raw"])
 
-                current_activity = activity.update(
-                    latest["accel_x_ms2"],
-                    latest["accel_y_ms2"],
-                    latest["accel_z_ms2"],
-                    latest["gyro_x_rads"],
-                    latest["gyro_y_rads"],
-                    latest["gyro_z_rads"],
-                )
-
-                now = time.monotonic()
-                if now - last_send < args.send_every:
-                    continue
-                last_send = now
-
-                hrv = calculate_hrv(list(ecg_buffer), args.sample_rate)
-                ppg_hr = latest["heart_rate_bpm"] if latest["heart_rate_bpm"] > 0 else None
-                heart_rate = hrv.ecg_heart_rate_bpm if hrv else ppg_hr
-                ppg_available = latest["max30102_ir"] > 0 or latest["max30102_red"] > 0
                 mpu_available = any(
                     latest[field] != 0.0
                     for field in (
@@ -176,6 +247,34 @@ def main() -> int:
                         "gyro_z_rads",
                     )
                 )
+                current_activity = (
+                    activity.update(
+                        latest["accel_x_ms2"],
+                        latest["accel_y_ms2"],
+                        latest["accel_z_ms2"],
+                        latest["gyro_x_rads"],
+                        latest["gyro_y_rads"],
+                        latest["gyro_z_rads"],
+                    )
+                    if mpu_available
+                    else "UNKNOWN"
+                )
+
+                now = time.monotonic()
+                if now - last_send < args.send_every:
+                    continue
+                last_send = now
+
+                hrv = calculate_hrv(list(ecg_buffer), args.sample_rate)
+                ppg_hr = latest["heart_rate_bpm"] if latest["heart_rate_bpm"] > 0 else None
+                heart_rate = hrv.ecg_heart_rate_bpm if hrv else ppg_hr
+                ppg_available = latest["max30102_ir"] > 0 or latest["max30102_red"] > 0
+                temperature_valid = 0.0 <= latest["temperature_c"] <= 60.0
+                temperature_text = (
+                    f"{latest['temperature_c']:.2f}C"
+                    if temperature_valid
+                    else f"INVALID({latest['temperature_c']:.2f}C)"
+                )
 
                 payload = {
                     "user_id": args.user,
@@ -183,7 +282,7 @@ def main() -> int:
                     "captured_at": timestamp,
                     "arduino_ms": latest["arduino_ms"],
                     "heart_rate_bpm": heart_rate,
-                    "temperature_c": latest["temperature_c"],
+                    "temperature_c": latest["temperature_c"] if temperature_valid else None,
                     "ecg_raw": latest["ecg_raw"],
                     "ecg_lead_off": latest["ecg_lead_off"],
                     "ppg_ir": latest["max30102_ir"] if ppg_available else None,
@@ -196,7 +295,14 @@ def main() -> int:
                     "gyro_z_rads": latest["gyro_z_rads"] if mpu_available else None,
                     "activity": current_activity,
                     "hrv": hrv.as_dict() if hrv else None,
+                    "ecg_samples": ecg_since_send[-2000:],
+                    "sample_rate_hz": args.sample_rate,
+                    "sensor_status": sensor_status(
+                        latest, ppg_available, mpu_available, temperature_valid, arduino_messages
+                    ),
+                    "arduino_messages": arduino_messages,
                 }
+                ecg_since_send = []
 
                 health_text = "dry-run"
                 if not args.dry_run:
@@ -211,9 +317,15 @@ def main() -> int:
                 if hrv:
                     hrv_text = f"RMSSD={hrv.rmssd_ms:.1f} SDNN={hrv.sdnn_ms:.1f}"
 
+                bad = [
+                    f"{name}:{info['state']}"
+                    for name, info in payload["sensor_status"].items()
+                    if info["state"] != "OK"
+                ]
                 print(
-                    f"{timestamp} | HR={heart_rate or 0:.1f} | Temp={latest['temperature_c']:.2f}C | "
+                    f"{timestamp} | HR={heart_rate or 0:.1f} | Temp={temperature_text} | "
                     f"Activity={current_activity} | {hrv_text} | {health_text}"
+                    + (f" | CHECK {' '.join(bad)}" if bad else "")
                 )
 
         except KeyboardInterrupt:

@@ -26,9 +26,15 @@ float heartRateBpm = 0.0f;
 bool max30102Ready = false;
 bool mpu6050Ready = false;
 
+// Quick ACK probe (uses the Wire timeout) before handing the bus to a library.
+bool i2cDevicePresent(uint8_t address) {
+  Wire.beginTransmission(address);
+  return Wire.endTransmission() == 0;
+}
+
 bool setupMAX30102() {
-  if (!max30102.begin(Wire, I2C_SPEED_FAST)) {
-    Serial.println("ERROR:MAX30102_NOT_FOUND");
+  // 100 kHz is more tolerant of breadboard wires and two modules on one bus.
+  if (!max30102.begin(Wire, I2C_SPEED_STANDARD)) {
     return false;
   }
 
@@ -52,7 +58,6 @@ bool setupMAX30102() {
 
 bool setupMPU6050() {
   if (!mpu6050.begin()) {
-    Serial.println("ERROR:MPU6050_NOT_FOUND");
     return false;
   }
 
@@ -100,13 +105,34 @@ void updateMAX30102() {
 
 void setup() {
   Serial.begin(230400);
+  Serial.println("INFO:DRIFTPULSE_BOOT");
 
   pinMode(ECG_LO_PLUS_PIN, INPUT);
   pinMode(ECG_LO_MINUS_PIN, INPUT);
 
-  Wire.begin();
-  max30102Ready = setupMAX30102();
-  mpu6050Ready = setupMPU6050();
+  // An idle I2C bus must read HIGH. If SDA or SCL is held LOW (short to GND,
+  // unpowered module, wire in the wrong row) every I2C call can hang forever,
+  // so skip the I2C sensors and keep streaming ECG + temperature.
+  pinMode(SDA, INPUT_PULLUP);
+  pinMode(SCL, INPUT_PULLUP);
+  delay(5);
+  bool i2cBusOk = digitalRead(SDA) == HIGH && digitalRead(SCL) == HIGH;
+
+  if (i2cBusOk) {
+    Wire.begin();
+#if defined(WIRE_HAS_TIMEOUT)
+    Wire.setWireTimeout(3000 /* us */, true /* reset bus on timeout */);
+#endif
+    max30102Ready = i2cDevicePresent(0x57) && setupMAX30102();
+    if (!max30102Ready) Serial.println("ERROR:MAX30102_NOT_FOUND");
+    mpu6050Ready = i2cDevicePresent(0x68) && setupMPU6050();
+    if (!mpu6050Ready) Serial.println("ERROR:MPU6050_NOT_FOUND");
+  } else {
+    Serial.print("ERROR:I2C_BUS_STUCK_LOW SDA=");
+    Serial.print(digitalRead(SDA) ? "HIGH" : "LOW");
+    Serial.print(" SCL=");
+    Serial.println(digitalRead(SCL) ? "HIGH" : "LOW");
+  }
 
   if (!max30102Ready) Serial.println("WARN:MAX30102_DISABLED");
   if (!mpu6050Ready) Serial.println("WARN:MPU6050_DISABLED");
