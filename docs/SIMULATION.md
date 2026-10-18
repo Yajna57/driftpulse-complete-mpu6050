@@ -21,7 +21,7 @@ The device panel shows `SIM-CASE<n>` as the device, so you can see which case is
 
 | Command | Case |
 |---|---|
-| `python -m scripts.simulate_data --case 1` | Normal healthy user |
+| `python -m scripts.simulate_data --case 1` | Normal user: seated rest |
 | `python -m scripts.simulate_data --case 2` | Temperature problem (fever) |
 | `python -m scripts.simulate_data --case 3` | All vitals abnormal |
 | `python -m scripts.simulate_data --case 4` | Each sensor reading wrong, one at a time |
@@ -29,12 +29,17 @@ The device panel shows `SIM-CASE<n>` as the device, so you can see which case is
 | `python -m scripts.simulate_data --case 6` | Sleeping |
 | `python -m scripts.simulate_data --case 7` | Heart attack pattern |
 | `python -m scripts.simulate_data --case 8` | Head spin / dizziness |
+| `python -m scripts.simulate_data --case 9` | Normal user: desk work |
+| `python -m scripts.simulate_data --case 10` | Normal user: relaxed breathing |
+
+Cases **1, 9 and 10** are the three normal-user cases. Use them to show what a healthy result looks like
+before running the problem cases.
 
 ### Options
 
 | Option | Default | Meaning |
 |---|---|---|
-| `--case N` | required | Case number 1-8. |
+| `--case N` | required | Case number 1-10. |
 | `--users A,B` | `USER001,USER002` | Users to simulate, in parallel. Any other ID reuses one of the two profiles. |
 | `--speed X` | `1` | `1` = real time (1 reading per second). `5` runs five times faster. |
 | `--no-reset` | off | Keep the learned baseline. If it is already complete, calibration is skipped. |
@@ -79,7 +84,7 @@ pattern for both users at different absolute numbers.
 Durations are at `--speed 1` and include the 70 s calibration. "Result" is what the current risk
 engine produced when each case was run.
 
-### 1. Normal healthy user (220 s)
+### 1. Normal user: seated rest (220 s)
 Seated at rest, all sensors OK, values stay near baseline.
 **Result:** CALIBRATING, then NORMAL for the whole run (risk 0-10).
 
@@ -129,6 +134,24 @@ Steady 20 s, head spinning 45 s (gyroscope Z about 4.5 rad/s), dizzy swaying 60 
 Heart rate +25 % and HRV -30 % during the episode, ECG with motion noise while spinning.
 **Result:** gyroscope charts spike. While spinning, Movement is HIGH and the activity discount keeps the
 status at ELEVATED. Swaying is only MODERATE, so status reaches ALERT; it returns to NORMAL after recovery.
+
+### 9. Normal user: desk work (250 s)
+Reading 60 s, typing 90 s, short pause 30 s. The MPU6050 shows small hand and head movements
+(gyroscope about 0.1 rad/s). Heart rate is about 1 % above rest and varies slightly more; HRV and
+temperature stay at baseline.
+**Result:** Movement RESTING (the movements are below the MODERATE thresholds), status NORMAL.
+Rarely, one random reading may flash OBSERVATION for a second.
+
+### 10. Normal user: relaxed breathing (260 s)
+Settling 30 s, slow calm breathing 120 s, back to normal 40 s. Heart rate eases down 1 % and is
+steadier; RMSSD and SDNN rise 2 %; temperature unchanged.
+**Result:** status NORMAL for the whole run (risk 0-10).
+
+### Why the normal cases use small changes
+The drift detector (CUSUM, `CUSUM_K=0.5`) flags any steady shift larger than about half a standard
+deviation of the user's baseline, which is about 1 bpm of heart rate or 1.5 ms of RMSSD. So a "normal"
+scenario must stay inside that band. Bigger sustained changes, even healthy ones such as deep
+relaxation or sleep (case 6), are reported as OBSERVATION.
 
 ## Saved data
 

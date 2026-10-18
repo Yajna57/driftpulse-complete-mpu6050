@@ -48,8 +48,8 @@ In another venv terminal:
 ```powershell
 cd python
 .\.venv\Scripts\Activate.ps1
-python -m scripts.simulate_data --list      # 8 cases: normal, fever, all abnormal, sensor faults,
-python -m scripts.simulate_data --case 1    # running, sleeping, heart attack, head spin
+python -m scripts.simulate_data --list      # 10 cases: 3 normal (1, 9, 10), fever, all abnormal,
+python -m scripts.simulate_data --case 1    # sensor faults, running, sleeping, heart attack, head spin
 ```
 
 Each case runs for USER001 and USER002 at the same time. See `docs/SIMULATION.md`.

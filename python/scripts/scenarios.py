@@ -44,7 +44,7 @@ class Phase:
     sdnn: float = 1.0     # multiplier of the user's SDNN
     temp: float = 0.0     # C added to the user's temperature
     ramp: int = 0         # seconds to move from the previous phase's values
-    motion: str = "sit"   # sit | lying | walk | run | spin | sway
+    motion: str = "sit"   # sit | desk | lying | walk | run | spin | sway
     ecg: str = "normal"   # normal | noisy | infarct
     hr_noise: float = 1.2
     faults: frozenset[str] = frozenset()
@@ -69,7 +69,7 @@ def _f(*names: str) -> frozenset[str]:
 
 CASES: dict[int, Case] = {
     1: Case(
-        1, "normal", "Normal healthy user",
+        1, "normal", "Normal user: seated rest",
         "Seated at rest. All four sensors work; values stay close to the personal baseline.",
         "CALIBRATING, then NORMAL with risk near 0 for the whole run.",
         (
@@ -169,6 +169,31 @@ CASES: dict[int, Case] = {
             Phase("recovered", 30, ramp=20),
         ),
     ),
+    9: Case(
+        9, "normal-desk", "Normal user: desk work",
+        "Sitting at a desk reading and typing, with small hand and head movements visible on the MPU6050. "
+        "Heart rate is up about 1 % and varies a little more than at rest; HRV and temperature stay at baseline.",
+        "Movement stays RESTING (the small motions are below the activity thresholds) and status stays NORMAL; "
+        "rarely, one random reading may flash OBSERVATION for a second.",
+        (
+            CALIBRATION,
+            Phase("reading", 60, hr=1.005, motion="desk", hr_noise=1.3),
+            Phase("typing", 90, hr=1.01, motion="desk", hr_noise=1.3, ramp=10),
+            Phase("short pause", 30, motion="sit", ramp=10),
+        ),
+    ),
+    10: Case(
+        10, "normal-relaxed", "Normal user: relaxed breathing",
+        "Calm, slow breathing while seated (for example, a short relaxation exercise). Heart rate "
+        "eases down 1 % and is steadier, RMSSD and SDNN rise 2 %, temperature unchanged.",
+        "Status stays NORMAL for the whole run.",
+        (
+            CALIBRATION,
+            Phase("settling", 30),
+            Phase("slow breathing", 120, hr=0.99, rmssd=1.02, sdnn=1.02, ramp=40, hr_noise=1.0),
+            Phase("back to normal", 40, ramp=30),
+        ),
+    ),
 }
 
 
@@ -177,6 +202,10 @@ def _motion_sample(kind: str, t: float) -> tuple[float, float, float, float, flo
     tau = 2 * math.pi
     if kind == "lying":
         return g(9.72, .02), g(.25, .02), g(.9, .02), g(0, .005), g(0, .005), g(0, .005)
+    if kind == "desk":
+        # Typing and small head turns: visible jitter, well below the MODERATE thresholds.
+        return (g(.25, .12) + .1 * math.sin(tau * 3 * t), g(-.15, .1), g(9.78, .1),
+                .08 * math.sin(tau * .3 * t) + g(0, .04), g(0, .05), .1 * math.sin(tau * .2 * t) + g(0, .03))
     if kind == "walk":
         return (.3 + 1.2 * math.sin(tau * 1.8 * t), g(-.1, .1), 9.8 + 2.0 * math.sin(tau * 3.6 * t),
                 .4 * math.sin(tau * 1.8 * t), .3 * math.cos(tau * 1.8 * t), g(0, .1))
