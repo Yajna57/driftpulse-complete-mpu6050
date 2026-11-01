@@ -67,7 +67,7 @@ Open `http://localhost:5173`.
 
 ## 7. Arduino
 
-Upload `arduino/driftpulse_sensors/driftpulse_sensors.ino` after installing the required Arduino libraries. Serial speed is 230400 baud.
+Upload `arduino/driftpulse_sensors/driftpulse_sensors.ino` after installing the required Arduino libraries. Serial speed is 115200 baud.
 
 Find the port:
 

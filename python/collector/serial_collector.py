@@ -37,7 +37,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--port", required=True, help="COM3, /dev/ttyACM0, etc.")
     parser.add_argument("--user", default="USER001")
     parser.add_argument("--device", default="ARDUINO001")
-    parser.add_argument("--baud", type=int, default=230400)
+    parser.add_argument("--baud", type=int, default=115200)
     parser.add_argument("--api", default="http://127.0.0.1:8000")
     parser.add_argument("--sample-rate", type=float, default=100.0)
     parser.add_argument("--send-every", type=float, default=1.0)
@@ -231,7 +231,7 @@ def main() -> int:
 
                 if latest["ecg_lead_off"]:
                     ecg_buffer.clear()
-                    ecg_since_send.append(None)
+                    ecg_since_send.append(latest["ecg_raw"])
                 else:
                     ecg_buffer.append(float(latest["ecg_raw"]))
                     ecg_since_send.append(latest["ecg_raw"])
@@ -266,7 +266,7 @@ def main() -> int:
                 last_send = now
 
                 hrv = calculate_hrv(list(ecg_buffer), args.sample_rate)
-                ppg_hr = latest["heart_rate_bpm"] if latest["heart_rate_bpm"] > 0 else None
+                ppg_hr = latest["heart_rate_bpm"]
                 heart_rate = hrv.ecg_heart_rate_bpm if hrv else ppg_hr
                 ppg_available = latest["max30102_ir"] > 0 or latest["max30102_red"] > 0
                 temperature_valid = 0.0 <= latest["temperature_c"] <= 60.0
@@ -282,17 +282,17 @@ def main() -> int:
                     "captured_at": timestamp,
                     "arduino_ms": latest["arduino_ms"],
                     "heart_rate_bpm": heart_rate,
-                    "temperature_c": latest["temperature_c"] if temperature_valid else None,
+                    "temperature_c": latest["temperature_c"],
                     "ecg_raw": latest["ecg_raw"],
                     "ecg_lead_off": latest["ecg_lead_off"],
-                    "ppg_ir": latest["max30102_ir"] if ppg_available else None,
-                    "ppg_red": latest["max30102_red"] if ppg_available else None,
-                    "accel_x_ms2": latest["accel_x_ms2"] if mpu_available else None,
-                    "accel_y_ms2": latest["accel_y_ms2"] if mpu_available else None,
-                    "accel_z_ms2": latest["accel_z_ms2"] if mpu_available else None,
-                    "gyro_x_rads": latest["gyro_x_rads"] if mpu_available else None,
-                    "gyro_y_rads": latest["gyro_y_rads"] if mpu_available else None,
-                    "gyro_z_rads": latest["gyro_z_rads"] if mpu_available else None,
+                    "ppg_ir": latest["max30102_ir"],
+                    "ppg_red": latest["max30102_red"],
+                    "accel_x_ms2": latest["accel_x_ms2"],
+                    "accel_y_ms2": latest["accel_y_ms2"],
+                    "accel_z_ms2": latest["accel_z_ms2"],
+                    "gyro_x_rads": latest["gyro_x_rads"],
+                    "gyro_y_rads": latest["gyro_y_rads"],
+                    "gyro_z_rads": latest["gyro_z_rads"],
                     "activity": current_activity,
                     "hrv": hrv.as_dict() if hrv else None,
                     "ecg_samples": ecg_since_send[-2000:],
