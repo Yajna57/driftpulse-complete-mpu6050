@@ -6,6 +6,7 @@ import { MetricCard } from './components/MetricCard'
 import { StatusCard } from './components/StatusCard'
 import { TrendChart } from './components/TrendChart'
 import type { AlertItem, BaselineResponse, HealthStatus, LiveState, Reading, UserItem } from './types'
+import { ecgWarning, heartRateWarning, motionWarning, ppgWarning, temperatureWarning } from './validate'
 import './styles.css'
 
 const fmt = (value: number | null | undefined, digits = 1) => value == null ? '—' : value.toFixed(digits)
@@ -112,12 +113,14 @@ function App() {
       ) : null}
 
       <section className="metrics-grid">
-        <MetricCard label="Heart rate (ECG / PPG)" value={`${fmt(latest?.heart_rate_bpm)} bpm`} helper="ECG-derived when HRV is available" />
-        <MetricCard label="RMSSD (ECG HRV)" value={`${fmt(latest?.rmssd_ms)} ms`} />
-        <MetricCard label="SDNN (ECG HRV)" value={`${fmt(latest?.sdnn_ms)} ms`} />
-        <MetricCard label="Body temperature (LM35)" value={`${fmt(latest?.temperature_c, 2)} °C`} />
-        <MetricCard label="Movement (MPU6050)" value={latest?.activity ?? '—'} helper="Accelerometer + gyroscope context" />
-        <MetricCard label="ECG electrodes (AD8232)" value={latest ? (latest.ecg_lead_off ? 'OFF / CHECK' : 'CONNECTED') : '—'} />
+        <MetricCard label="Heart rate (ECG / PPG)" value={`${fmt(latest?.heart_rate_bpm)} bpm`} helper="ECG-derived when HRV is available" hasData={latest?.heart_rate_bpm != null} warning={heartRateWarning(latest?.heart_rate_bpm)} />
+        <MetricCard label="RMSSD (ECG HRV)" value={`${fmt(latest?.rmssd_ms)} ms`} hasData={latest?.rmssd_ms != null} helper={latest?.rmssd_ms == null ? 'Needs steady ECG' : undefined} />
+        <MetricCard label="SDNN (ECG HRV)" value={`${fmt(latest?.sdnn_ms)} ms`} hasData={latest?.sdnn_ms != null} helper={latest?.sdnn_ms == null ? 'Needs steady ECG' : undefined} />
+        <MetricCard label="Body temperature (LM35)" value={`${fmt(latest?.temperature_c, 2)} °C`} hasData={latest?.temperature_c != null} warning={temperatureWarning(latest?.temperature_c)} />
+        <MetricCard label="Movement (MPU6050)" value={latest?.activity ?? '—'} helper="Accelerometer + gyroscope context" hasData={latest != null} warning={motionWarning(latest)} />
+        <MetricCard label="ECG electrodes (AD8232)" value={latest ? (latest.ecg_lead_off ? 'OFF / CHECK' : 'CONNECTED') : '—'} hasData={latest != null} warning={ecgWarning(latest)} />
+        <MetricCard label="Infrared (MAX30102)" value={fmt(latest?.ppg_ir, 0)} hasData={latest?.ppg_ir != null} warning={ppgWarning(latest?.ppg_ir)} />
+        <MetricCard label="Red (MAX30102)" value={fmt(latest?.ppg_red, 0)} hasData={latest?.ppg_red != null} warning={ppgWarning(latest?.ppg_red)} />
       </section>
 
       <EcgChart live={live} />

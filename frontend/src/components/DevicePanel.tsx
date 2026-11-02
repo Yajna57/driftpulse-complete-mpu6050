@@ -45,11 +45,13 @@ export function DevicePanel({ live, latest }: { live: LiveState | null; latest: 
         {SENSORS.map(({ key, role }) => {
           const s = live?.sensor_status?.[key]
           const state = connection === 'live' && s ? s.state : 'UNKNOWN'
+          // Data arriving -> green. A bad status only adds a small warning.
+          const hasData = state !== 'UNKNOWN'
           return (
-            <div className={`sensor-chip sensor-${state === 'OK' ? 'ok' : state === 'UNKNOWN' ? 'unknown' : 'bad'}`} key={key} title={s?.detail}>
+            <div className={`sensor-chip ${hasData ? 'sensor-ok' : 'sensor-unknown'}`} key={key} title={s?.detail}>
               <div><strong>{key}</strong><span>{role}</span></div>
-              <em>{LABELS[state] ?? '—'}</em>
-              {s && state !== 'OK' && state !== 'UNKNOWN' ? <small>{s.detail}</small> : null}
+              <em>{hasData ? 'Data' : 'Waiting'}</em>
+              {s && state !== 'OK' && state !== 'UNKNOWN' ? <small className="warn-text">⚠ {LABELS[state] ?? state}: {s.detail}</small> : null}
             </div>
           )
         })}
