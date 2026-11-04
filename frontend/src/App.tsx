@@ -3,6 +3,7 @@ import { api, DEFAULT_USER_ID } from './api'
 import { DevicePanel } from './components/DevicePanel'
 import { EcgChart } from './components/EcgChart'
 import { MetricCard } from './components/MetricCard'
+import { SettingsPanel } from './components/SettingsPanel'
 import { StatusCard } from './components/StatusCard'
 import { TrendChart } from './components/TrendChart'
 import type { AlertItem, BaselineResponse, HealthStatus, LiveState, Reading, UserItem } from './types'
@@ -29,6 +30,7 @@ function App() {
   const [baseline, setBaseline] = useState<BaselineResponse | null>(null)
   const [alerts, setAlerts] = useState<AlertItem[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [showSettings, setShowSettings] = useState(false)
 
   const refresh = useCallback(async () => {
     const results = await Promise.allSettled([
@@ -96,9 +98,12 @@ function App() {
               {userOptions.map((id) => <option key={id} value={id}>{id}</option>)}
             </select>
           </label>
+          <button className="secondary-button" onClick={() => setShowSettings((v) => !v)}>Settings</button>
           <button className="secondary-button" onClick={resetBaseline}>Reset baseline</button>
         </div>
       </header>
+
+      {showSettings ? <SettingsPanel userId={userId} onClose={() => setShowSettings(false)} /> : null}
 
       {error ? <div className="notice">{error}</div> : null}
       <DevicePanel live={live} latest={latest} />

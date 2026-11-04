@@ -11,6 +11,7 @@ from ..models import SensorReading
 from ..schemas import IngestResponse, ReadingCreate, ReadingOut
 from ..services.analysis import analyze_reading
 from ..services.live import get_live, update_live
+from ..services.telegram import flush_pending
 
 router = APIRouter(prefix="/api/v1", tags=["readings"])
 
@@ -62,6 +63,7 @@ def create_reading(payload: ReadingCreate, db: Session = Depends(get_db)) -> Ing
 
     analysis = analyze_reading(db, row)
     db.commit()
+    flush_pending(db)
 
     update_live(
         payload.user_id,

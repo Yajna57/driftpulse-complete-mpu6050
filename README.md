@@ -102,6 +102,7 @@ See:
 - `docs/ALGORITHMS.md` — HRV, baseline, EWMA/CUSUM and motion context
 - `docs/API.md` — backend endpoints
 - `docs/SIMULATION.md` — the 10 simulated test cases
+- `docs/TELEGRAM.md` — set up and use Telegram alerts
 
 ## Important
 

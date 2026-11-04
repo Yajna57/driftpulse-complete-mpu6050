@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     cusum_k: float = 0.50
     cusum_h: float = 5.00
 
+    # Optional fallback; the token saved from the frontend settings takes priority.
+    telegram_bot_token: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     @property

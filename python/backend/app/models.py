@@ -105,3 +105,20 @@ class Alert(Base):
     alert_type: Mapped[str] = mapped_column(String(64), default="PHYSIOLOGICAL_DRIFT")
     message: Mapped[str] = mapped_column(String(512))
     resolved: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+GLOBAL_SCOPE = "__global__"
+
+
+class TelegramConfig(Base):
+    """Telegram delivery settings. One row per user, plus one GLOBAL_SCOPE row
+    holding the shared bot token and the general (all-users) chat."""
+
+    __tablename__ = "telegram_configs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    scope: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    bot_token: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    chat_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
 from .db import Base, engine
-from .routers import health, readings
+from .routers import health, readings, telegram
 
 settings = get_settings()
 
@@ -37,6 +37,7 @@ app.add_middleware(
 
 app.include_router(readings.router)
 app.include_router(health.router)
+app.include_router(telegram.router)
 
 
 @app.get("/")

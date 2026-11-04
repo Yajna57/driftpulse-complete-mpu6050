@@ -48,6 +48,18 @@ export interface BaselineResponse {
   metrics: Record<string, BaselineMetric>
 }
 
+export interface TelegramChat {
+  chat_id: string | null
+  enabled: boolean
+}
+
+export interface TelegramSettings {
+  bot_token_set: boolean
+  bot_token_hint: string
+  general: TelegramChat
+  user: TelegramChat | null
+}
+
 export interface AlertItem {
   id: number
   severity: string

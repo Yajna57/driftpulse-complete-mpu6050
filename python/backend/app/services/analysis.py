@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..models import Alert, BaselineMetric, DriftState, HealthAnalysis, SensorReading
+from .telegram import build_alert_message, queue_alert
 
 settings = get_settings()
 
@@ -184,7 +185,17 @@ def classify_risk(
     return score, status, summary, observations
 
 
-def _maybe_create_alert(db: Session, user_id: str, status: str, summary: str) -> None:
+def _maybe_create_alert(
+    db: Session,
+    user_id: str,
+    status: str,
+    summary: str,
+    *,
+    reading: SensorReading,
+    risk_score: int,
+    observations: list[str],
+    z_scores: dict[str, float | None],
+) -> None:
     if status not in {"ELEVATED", "ALERT"}:
         return
 
@@ -206,6 +217,20 @@ def _maybe_create_alert(db: Session, user_id: str, status: str, summary: str) ->
                 alert_type="PHYSIOLOGICAL_DRIFT",
                 message=summary,
             )
+        )
+        queue_alert(
+            db,
+            user_id,
+            build_alert_message(
+                user_id,
+                status,
+                summary,
+                observations,
+                z_scores,
+                reading_metric_values(reading),
+                reading.activity,
+                risk_score,
+            ),
         )
 
 
@@ -284,7 +309,16 @@ def analyze_reading(db: Session, reading: SensorReading) -> HealthAnalysis:
         baseline_ready=True,
     )
     db.add(analysis)
-    _maybe_create_alert(db, reading.user_id, status, summary)
+    _maybe_create_alert(
+        db,
+        reading.user_id,
+        status,
+        summary,
+        reading=reading,
+        risk_score=risk_score,
+        observations=observations,
+        z_scores=z_scores,
+    )
     db.flush()
     return analysis
 
