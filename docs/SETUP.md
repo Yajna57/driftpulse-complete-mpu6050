@@ -12,6 +12,12 @@ py -3.14 --version
 
 From project root:
 
+Point to correct folder:
+```powershell
+cd driftpulse-complete-mpu6050
+```
+> Run above command everytime if new terminal created
+----
 ```powershell
 docker compose up -d
 docker compose ps
