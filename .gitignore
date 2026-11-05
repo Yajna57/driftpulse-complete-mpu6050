@@ -10,3 +10,4 @@ frontend/.env
 Thumbs.db
 .vscode/
 .idea/
+scripts/.pids

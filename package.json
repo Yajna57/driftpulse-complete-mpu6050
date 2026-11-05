@@ -1,0 +1,12 @@
+{
+  "name": "driftpulse",
+  "private": true,
+  "scripts": {
+    "setup": "scripts\\setup.cmd",
+    "start": "scripts\\start.cmd",
+    "stop": "scripts\\stop.cmd",
+    "data": "scripts\\data.cmd",
+    "sim": "scripts\\data.cmd -Mode sim",
+    "sensor": "scripts\\data.cmd -Mode sensor"
+  }
+}
